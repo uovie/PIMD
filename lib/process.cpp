@@ -7,7 +7,6 @@
 
 // Piano headers
 #include "process.h"
-#include "simu_para.h"
 #include "phy_const.h"
 #include "atom_data.h"
 

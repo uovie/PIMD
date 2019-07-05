@@ -26,26 +26,6 @@ namespace thermostat {
 namespace nhc {
 
     /*** ================================================== ***/
-    /*** Thermostat Variables                               ***/
-    /*** ================================================== ***/
-
-    class thermo_vari {
-    public:
-        thermo_vari() = default;
-        thermo_vari(double m, double e, double t):
-            mu(m), eta(e), theta(t) { }
-
-        double mu;                      // extented mass
-        double eta;                     // extented position
-        double theta;                   // extented momentum
-        double Gamma;                   // thermostat force
-    };
-
-    
-    void thermo_vari_generator(std::vector<thermo_vari>& tmvs,
-        const int M, const double& T, const double tau);
-    
-    /*** ================================================== ***/
     /*** Thermostat Factorization Scheme                    ***/
     /*** ================================================== ***/
 
@@ -74,61 +54,61 @@ namespace nhc {
     };
 
     /*** ================================================== ***/
-    /*** NHC Procedure                                      ***/
+    /*** NHC Procedure for pimd                             ***/
     /*** ================================================== ***/
 
-    Eigen::ArrayXXd stag_trans(Eigen::ArrayXXd& cart_pos_coll, Eigen::ArrayXXd& tran_pos_coll);
-    Eigen::ArrayXXd inve_stag_trans(Eigen::ArrayXXd& cart_pos_coll, Eigen::ArrayXXd& tran_pos_coll);
-
-    std::mt19937 nhc_tmv_mte(27);
-    std::mt19937 car_mom_mte(36);
-
-    class nhc_procedure {
+    class nhc_procedure_for_pimd {
     public:
-        nhc_procedure() = default;
-        nhc_procedure(const Global::basic_simu_para& _bsp, const Global::system& _sys,
-            const Eigen::ArrayXXd& _zero, const thermo_factor_scheme& _tfs, const int _M) :
-            bsp(_bsp), sys(_sys), zero(_zero), tfs(_tfs), M(_M) { }
+        nhc_procedure_for_pimd() = default;
+        nhc_procedure_for_pimd(const Global::basic_simu_para& _bsp, const Global::system& _sys,
+            const thermo_factor_scheme& _tfs, const Eigen::ArrayXXd& _ZeroXXd, const Eigen::ArrayXXd& _ZeroXXXd) :
+            bsp(_bsp), sys(_sys), tfs(_tfs), ZeroXXd(_ZeroXXd), ZeroXXXd(_ZeroXXXd) { }
         
         void initialize();
         void implement();
         void implement(std::ofstream& out);
         //double sys_ene() const { return syst_energy; }
 
-    protected:
+    private:
         const Global::basic_simu_para& bsp;
         const Global::system& sys;
-        const Eigen::ArrayXXd& zero;
         const thermo_factor_scheme& tfs;
-        const int M;                        // extented dimension
-        const int nbead = zero.cols();
+        const Eigen::ArrayXXd& ZeroXXd;
+        const Eigen::ArrayXXd& ZeroXXXd;
+        const int nbead = ZeroXXd.cols();
+        const int nchain = ZeroXXXd.rows() / ZeroXXd.rows();    // extented dimension
 
+        const double& Dt = bsp.step_size;
         const int& d = sys.dimension;
         const int& N = sys.num_part;
+        const int dof = d * N;
         const double k = uovie::phy_const::Boltzmann_const;
         const double& T = sys.temperature;
+        const int& M = nchain;
         const double fic_omega = k * T * sqrt(nbead) / h_bar;
 
+        Eigen::ArrayXXd m = ZeroXXd;            // real mass
+        Eigen::ArrayXXd q = ZeroXXd;            // real position
+        Eigen::ArrayXXd m_tilde = ZeroXXd;      // transformed mass
+        Eigen::ArrayXXd r = ZeroXXd;            // transformed position
+        Eigen::ArrayXXd s = ZeroXXd;            // fictitious momentum
+        Eigen::ArrayXXd F = ZeroXXd;            // fictitious force
         
-        Eigen::ArrayXXd cpc = zero;         // cart_pos_coll
-        Eigen::ArrayXXd tpc = zero;         // tran_pos_coll
-        Eigen::ArrayXXd rmc = zero;         // real_mas_coll
-        Eigen::ArrayXXd tmc = zero;         // tran_mas_coll
-        Eigen::ArrayXXd fmc = zero;         // fict_mom_coll
-        Eigen::ArrayXXd F = zero;
-        
-        std::vector<Eigen::ArrayXXd> mu;          // extented mass
-        std::vector<Eigen::ArrayXXd> eta;         // extented position
-        std::vector<Eigen::ArrayXXd> theta;       // extented momentum
-        std::vector<Eigen::ArrayXXd> Gamma;       // thermostat force
+        Eigen::ArrayXXd mu = ZeroXXXd;          // extented mass
+        Eigen::ArrayXXd eta = ZeroXXXd;         // extented position
+        Eigen::ArrayXXd theta = ZeroXXXd;       // extented momentum
+        Eigen::ArrayXXd Gamma = ZeroXXXd;       // thermostat force
 
-        Eigen::ArrayXXd kine_energy = zero;
-        Eigen::ArrayXXd pote_energy = zero;
-        Eigen::ArrayXXd ther_energy = zero;
-        Eigen::ArrayXXd cons_energy = zero;
+        Eigen::ArrayXXd kine_energy = ZeroXXd;
+        Eigen::ArrayXXd pote_energy = ZeroXXd;
+        Eigen::ArrayXXd ther_energy = ZeroXXd;
+        Eigen::ArrayXXd cons_energy = ZeroXXd;
 
         double sys_tot_energy = 0;
         double cano_prob_dens = 0;
+
+        void stag_trans();
+        void inve_stag_trans();
 
         void calc_physic_force();
         void calc_thermo_force(const int& j);
