@@ -85,7 +85,8 @@ namespace nhc {
 
         Eigen::ArrayXXd m;          // real mass
         Eigen::ArrayXXd q;          // real position
-        Eigen::ArrayXXd m_tilde;    // transformed mass
+        Eigen::ArrayXXd m_tilde;    // transformed mass tilde
+        Eigen::ArrayXXd m_bar;      // transformed mass bar
         Eigen::ArrayXXd r;          // transformed position
         Eigen::ArrayXXd s;          // fictitious momentum
         Eigen::ArrayXXd F;          // fictitious force
