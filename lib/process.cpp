@@ -36,7 +36,7 @@ void process::read() {
     constexpr double angstrom_to_bohr = 1e-10 / phy_const::a_u_length;
 
     std::cout << "Read Infomation from " << fn_no_ex + ".vie" << std::endl;
-    in >> job >> bsp.run_time >> bsp.time_step_size >> bsp.data_coll_peri;
+    in >> job >> bsp.run_time >> bsp.step_size >> bsp.data_coll_peri;
     in >> sys.dimension >> sys.volume >> sys.temperature >> sys.pressure;
 
     const double k = phy_const::Boltzmann_const;

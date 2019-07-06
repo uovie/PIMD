@@ -26,7 +26,7 @@ int main(int argc, char* argv[]) {
     /*** ================================================== ***/
 
     pimd::pimd_via_nhc pimd_proce(simulation.out, simulation.bsp, simulation.sys, 8, 4);
-    pimd_proce.pimd_implement();
+    pimd_proce.implement();
 
     /*** ================================================== ***/
     /*** Simulation termination                             ***/

@@ -1,6 +1,6 @@
-// uovie process
-#ifndef UOV_PROC_H_
-#define UOV_PROC_H_
+// Process
+#ifndef PROCESS_H_
+#define PROCESS_H_
 
 // standard C++ headers
 #include <fstream>
@@ -22,7 +22,7 @@ namespace Global {
         basic_simu_para bsp;
         system sys;
 
-        void open(const std::string& file_name);
+        void open(const std::string& filename);
         void read();
         void print();
         void close();
@@ -30,4 +30,4 @@ namespace Global {
     
 } // !Global
 } // !uovie
-#endif
+#endif // !PROCESS_H_

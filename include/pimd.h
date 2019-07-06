@@ -25,7 +25,7 @@ namespace pimd {
             const Global::system& _sys, const int _nbead, const int _nchain) :
             out(_out), bsp(_bsp), sys(_sys), nbead(_nbead), nchain(_nchain) { }
 
-        void pimd_implement();
+        void implement();
 
     private:
         std::ofstream& out;
@@ -33,11 +33,6 @@ namespace pimd {
         const Global::system& sys;
         const int nbead;
         const int nchain;
-
-        const int& d = sys.dimension;
-        const int& N = sys.num_part;
-        const double& T = sys.temperature;
-        const int& M = nchain;
     };
 
 } // !pimd

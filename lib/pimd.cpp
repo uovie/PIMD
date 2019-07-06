@@ -12,12 +12,10 @@
 namespace uovie {
 namespace pimd {
 
-    void pimd_via_nhc::pimd_implement()
+    void pimd_via_nhc::implement()
     {
-        Eigen::ArrayXXd ZeroXXd(d * N, nbead); // ZeroXXd.setZero();
-        Eigen::ArrayXXd ZeroXXXd(d * N * M, nbead); // ZeroXXXd.setZero();
         thermostat::nhc::thermo_factor_scheme tfs(7, 1);
-        thermostat::nhc::nhc_procedure_for_pimd nhc_proce(bsp, sys, tfs, ZeroXXd, ZeroXXXd);
+        thermostat::nhc::nhc_procedure_for_pimd nhc_proce(bsp, sys, tfs, nchain, nbead);
         nhc_proce.implement(out);
     }
 

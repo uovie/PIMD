@@ -33,14 +33,14 @@ namespace nhc {
     class thermo_factor_scheme {
     public:
         thermo_factor_scheme() = default;
-        thermo_factor_scheme(const int nsy, const int nff): n_sy(nsy), n_ff(nff) {
-            if (nsy == 3)
+        thermo_factor_scheme(const int _n_sy, const int _n_ff): n_sy(_n_sy), n_ff(_n_ff) {
+            if (_n_sy == 3)
                 weight = { 1.351207191959658, -1.702414383919316, 1.351207191959658 };
-            else if (nsy == 7)
+            else if (_n_sy == 7)
                 weight = { 0.784513610477560, 0.235573213359357, -1.17767998417887,
                     1.315186320683906, -1.17767998417887, 0.235573213359357, 0.784513610477560 };
             else
-                throw "unsupported Suzuki-Yoshida scheme";
+                throw "unsupported NHC factorization scheme";
         }
 
         int nsy() const { return n_sy; }
@@ -61,60 +61,58 @@ namespace nhc {
     public:
         nhc_procedure_for_pimd() = default;
         nhc_procedure_for_pimd(const Global::basic_simu_para& _bsp, const Global::system& _sys,
-            const thermo_factor_scheme& _tfs, const Eigen::ArrayXXd& _ZeroXXd, const Eigen::ArrayXXd& _ZeroXXXd) :
-            bsp(_bsp), sys(_sys), tfs(_tfs), ZeroXXd(_ZeroXXd), ZeroXXXd(_ZeroXXXd) { }
+            const thermo_factor_scheme& _tfs, const int _nchain, const int _nbead):
+            bsp(_bsp), sys(_sys), tfs(_tfs), nchain(_nchain), nbead(_nbead) { }
         
-        void initialize();
         void implement();
         void implement(std::ofstream& out);
-        //double sys_ene() const { return syst_energy; }
 
     private:
         const Global::basic_simu_para& bsp;
         const Global::system& sys;
         const thermo_factor_scheme& tfs;
-        const Eigen::ArrayXXd& ZeroXXd;
-        const Eigen::ArrayXXd& ZeroXXXd;
-        const int nbead = ZeroXXd.cols();
-        const int nchain = ZeroXXXd.rows() / ZeroXXd.rows();    // extented dimension
+        const int nchain;   // extented dimension
+        const int nbead;
 
         const double& Dt = bsp.step_size;
         const int& d = sys.dimension;
         const int& N = sys.num_part;
         const int dof = d * N;
-        const double k = uovie::phy_const::Boltzmann_const;
         const double& T = sys.temperature;
+        const double beta = 1 / (k * T);
         const int& M = nchain;
-        const double fic_omega = k * T * sqrt(nbead) / h_bar;
+        const double fic_omega = sqrt(nbead) / (h_bar * beta);
 
-        Eigen::ArrayXXd m = ZeroXXd;            // real mass
-        Eigen::ArrayXXd q = ZeroXXd;            // real position
-        Eigen::ArrayXXd m_tilde = ZeroXXd;      // transformed mass
-        Eigen::ArrayXXd r = ZeroXXd;            // transformed position
-        Eigen::ArrayXXd s = ZeroXXd;            // fictitious momentum
-        Eigen::ArrayXXd F = ZeroXXd;            // fictitious force
+        Eigen::ArrayXXd m;          // real mass
+        Eigen::ArrayXXd q;          // real position
+        Eigen::ArrayXXd m_tilde;    // transformed mass
+        Eigen::ArrayXXd r;          // transformed position
+        Eigen::ArrayXXd s;          // fictitious momentum
+        Eigen::ArrayXXd F;          // fictitious force
         
-        Eigen::ArrayXXd mu = ZeroXXXd;          // extented mass
-        Eigen::ArrayXXd eta = ZeroXXXd;         // extented position
-        Eigen::ArrayXXd theta = ZeroXXXd;       // extented momentum
-        Eigen::ArrayXXd Gamma = ZeroXXXd;       // thermostat force
+        Eigen::ArrayXXd mu;         // extented mass
+        Eigen::ArrayXXd eta;        // extented position
+        Eigen::ArrayXXd theta;      // extented momentum
+        Eigen::ArrayXXd Gamma;      // thermostat force
 
-        Eigen::ArrayXXd kine_energy = ZeroXXd;
-        Eigen::ArrayXXd pote_energy = ZeroXXd;
-        Eigen::ArrayXXd ther_energy = ZeroXXd;
-        Eigen::ArrayXXd cons_energy = ZeroXXd;
+        Eigen::ArrayXXd kine_energy;
+        Eigen::ArrayXXd pote_energy;
+        Eigen::ArrayXXd ther_energy;
+        Eigen::ArrayXXd cons_energy;
 
-        double sys_tot_energy = 0;
-        double cano_prob_dens = 0;
+        double prim_kine_estor = 0;
+        double prim_pote_estor = 0;
+        double prim_pres_estor = 0;
 
+        void initialize();
         void stag_trans();
         void inve_stag_trans();
-
         void calc_physic_force();
         void calc_thermo_force(const int& j);
         void physic_propagate();
         void thermo_propagate();
-        void calc_syco_energy();
+        void calc_cons_quant();
+        void calc_prim_estor();
 
         void print_nhc_procedure_title(std::ofstream& out);
         void print_nhc_procedure_data(std::ofstream& out, double& t);

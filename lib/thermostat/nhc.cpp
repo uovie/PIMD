@@ -12,8 +12,8 @@ namespace uovie {
 namespace thermostat {
 namespace nhc {
 
-    std::mt19937 nhc_tmv_mte(27);
-    std::mt19937 car_mom_mte(36);
+    std::mt19937 s_mte(36);
+    std::mt19937 theta_mte(27);
 
     /*** ================================================== ***/
     /*** NHC Procedure for PIMD Class Member Functions      ***/
@@ -22,13 +22,31 @@ namespace nhc {
     // initialization
     void nhc_procedure_for_pimd::initialize()
     {
+        // resize arrays
+        m.resize(d * N, nbead);
+        q.resize(d * N, nbead);
+        m_tilde.resize(d * N, nbead);
+        r.resize(d * N, nbead);
+        s.resize(d * N, nbead);
+        F.resize(d * N, nbead);
+
+        mu.resize(d * N * M, nbead);
+        eta.resize(d * N * M, nbead);
+        theta.resize(d * N * M, nbead);
+        Gamma.resize(d * N * M, nbead);
+
+        kine_energy.resize(d * N, nbead);
+        pote_energy.resize(d * N, nbead);
+        ther_energy.resize(d * N, nbead);
+        cons_energy.resize(d * N, nbead);
+
         // initialize cartisian positions and masses
         int vi = 0;
         for (auto mi = 0; mi < sys.molecules.size(); mi++) {
             for (auto ai = 0; ai < sys.molecules[mi].atoms.size(); ai++) {
                 for (auto di = 0; di < d; di++) {
-                    q(vi, 0) = sys.molecules[mi].atoms[ai].q[di];
                     m(vi, 0) = sys.molecules[mi].atoms[ai].m;
+                    q(vi, 0) = sys.molecules[mi].atoms[ai].q[di];
                     vi++;
                 }
             }
@@ -38,32 +56,35 @@ namespace nhc {
             m.col(ci) = m.col(0);
         }
 
-        // initialize staging transformed positions
-        r = q;
-        stag_trans();
-
         // initialize staging transformed masses
         m_tilde.col(0) = m.col(0);
         for (auto ci = 1; ci < m_tilde.cols(); ci++)
             m_tilde.col(ci) = ((ci + 1.0) / ci) * m.col(ci);
 
+        // initialize staging transformed positions
+        r = q;
+        stag_trans();
+
         // initialize fictition momenta
         for (auto ri = 0; ri < s.rows(); ri++) {
             for (auto ci = 0; ci < s.cols(); ci++){
                 std::normal_distribution<double> ndrm{ 0, sqrt(k * T * m(ri, ci)) };
-                s(ri, ci) = ndrm(car_mom_mte);
+                s(ri, ci) = ndrm(s_mte);
             }
         }
 
         // initialize extented masses and extented momenta
         double tau = 1;
-        mu = k * T * pow(tau, 2) * (ZeroXXXd + 1);
+        mu = k * T * pow(tau, 2) * Eigen::ArrayXXd::Constant(d * N * M, nbead, 1);
         for (auto ri = 0; ri < theta.rows(); ri++) {
             for (auto ci = 0; ci < theta.cols(); ci++) {
                 std::normal_distribution<double> ndrm{ 0, sqrt(k * T * mu(ri, ci)) };
-                theta(ri, ci) = ndrm(nhc_tmv_mte);
+                theta(ri, ci) = ndrm(theta_mte);
             }
         }
+
+        // initialize extented positions
+        eta.setZero();
 
     }
 
@@ -72,17 +93,17 @@ namespace nhc {
     {
         r.col(0) = q.col(0);
         for (int ci = 1; ci < r.cols() - 1; ci++)
-            r.col(ci) = -(1 / (ci + 1.0)) * q.col(ci) + q.col(ci) - (ci / (ci + 1.0)) * q.col(ci + 1);
+            r.col(ci) = -(1 / (ci + 1.0)) * q.col(0) + q.col(ci) - (ci / (ci + 1.0)) * q.col(ci + 1);
         r.col(r.cols() - 1) = q.col(r.cols() - 1) - q.col(0);
     }
 
     // inverse staging transformation
     void nhc_procedure_for_pimd::inve_stag_trans()
     {
-        q.col(0) = r.col(0);
-        q.col(q.cols() - 1) = r.col(r.cols() - 1) + r.col(0);
+        q.col(q.cols() - 1) = r.col(q.cols() - 1) + r.col(0);
         for (int ci = q.cols() - 2; ci > 0; ci--)
             q.col(ci) = (1 / (ci + 1.0)) * r.col(0) + r.col(ci) + (ci / (ci + 1.0)) * q.col(ci + 1);
+        q.col(0) = r.col(0);
     }
 
     // calculate physical forces (simple harmonic oscillator)
@@ -98,7 +119,7 @@ namespace nhc {
         for (auto ci = 1; ci < F.cols(); ci++)
             F.col(ci) = -1 * m_tilde.col(ci) * pow(fic_omega, 2) * r.col(ci)
             - (m.col(ci) * pow(omega, 2) * q.col(ci)
-                + ((ci - 1.0) / ci) * m.col(ci - 1) * pow(omega, 2) * q.col(ci - 1)) / nbead;
+                - ((ci - 1.0) / ci) * F.col(ci - 1)) / nbead;
     }
 
     void nhc_procedure_for_pimd::calc_thermo_force(const int& j)
@@ -157,21 +178,15 @@ namespace nhc {
         }
     }
 
-    void nhc_procedure_for_pimd::calc_syco_energy()
+    void nhc_procedure_for_pimd::calc_cons_quant()
     {
-        double omega = 1;
-
         kine_energy = s.pow(2) / (2 * m_tilde);
 
-        pote_energy.col(0).setZero();
-        for (auto cj = 0; cj < pote_energy.cols(); cj++)
-            pote_energy.col(0) += 0.5 * m.col(0) * pow(omega, 2) * q.col(cj).pow(2);
-        pote_energy.col(0) /= nbead;
-
+        double omega = 1;
+        pote_energy.col(0) = 0.5 * m.col(0) * pow(omega, 2) * q.col(0).pow(2) / nbead;
         for (auto ci = 1; ci < pote_energy.cols(); ci++)
-            pote_energy.col(ci) += 0.5 * m_tilde.col(ci) * pow(fic_omega, 2) * r.col(ci).pow(2)
-            + (0.5 * m.col(ci) * pow(omega, 2) * q.col(ci).pow(2)
-                + 0.5 * ((ci - 1.0) / ci) * m.col(ci) * pow(omega, 2) * q.col(ci - 1).pow(2)) / nbead;
+            pote_energy.col(ci) = 0.5 * m_tilde * pow(fic_omega, 2) * r.col(ci).pow(2)
+            + 0.5 * m.col(ci) * pow(omega, 2) * q.col(ci).pow(2) / nbead;
 
         ther_energy.setZero();
         for (int j = 0; j < M; j++)
@@ -179,31 +194,40 @@ namespace nhc {
             + k * T * eta.block(j * dof, 0, dof, nbead);
 
         cons_energy = kine_energy + pote_energy + ther_energy;
+    }
 
-        double sys_kine_energy = (0.5 * s.pow(2) / m).sum();
-        double sys_pote_energy = (0.5 * m * pow(omega, 2) * q.pow(2)).sum();
+    void nhc_procedure_for_pimd::calc_prim_estor()
+    {
+        prim_kine_estor = 0;
+        for (int bi = 0; bi < nbead - 1; bi++)
+            prim_kine_estor += (m.col(0) * (q.col(bi + 1) - q.col(bi)).pow(2)).sum();
+        prim_kine_estor += (m.col(0) * (q.col(0) - q.col(nbead - 1)).pow(2)).sum();
+        prim_kine_estor *= -1 * nbead / (2 * pow(h_bar * beta, 2));
+        prim_kine_estor += dof * nbead / (2 * beta);
 
-        sys_tot_energy = sys_kine_energy + sys_kine_energy;
-        cano_prob_dens = exp(-sys_tot_energy / (k * T));
+        //double omega = 1;
+        //prim_pote_estor = 0.5 * (m * pow(omega, 2) * q.pow(2)).sum() / nbead;
+
+        //prim_pres_estor = N*nbead/(beta * V)
     }
 
     void nhc_procedure_for_pimd::print_nhc_procedure_title(std::ofstream& out) {
-        std::cout << "\nNHC Procedure:\n   Time" << "  " << "position" << "  " << "momentum" << "  "
-            << "cons_energy" << "  " << "cano_prob_dens";
-        out << "\nNHC Procedure:\n   Time" << "  " << "position" << "  " << "momentum" << "  "
-            << "cons_energy" << "  " << "cano_prob_dens";
+        std::cout << "\nNHC Procedure for PIMD:\n   Time" << "            " << "position" << "            "
+            << "momentum" << "          " << "cons_energy" << "        " << "prim_kine_estor";
+        out << "\nNHC Procedure for PIMD:\n   Time" << "            " << "position" << "            "
+            << "momentum" << "          " << "cons_energy" << "        " << "prim_kine_estor";
     }
 
     void nhc_procedure_for_pimd::print_nhc_procedure_data(std::ofstream& out, double& t) {
         std::cout << "\n" << std::fixed << std::setprecision(5) << std::setw(10) << t;
-        out << "\n" << std::fixed << std::setprecision(5) << t;
+        out << "\n" << std::fixed << std::setprecision(5) << std::setw(10) << t;
 
         std::cout << std::setprecision(8);
         out << std::setprecision(8);
-        std::cout << std::setw(15) << r(0, 0) << std::setw(15) << s(0, 0)
-            << std::setw(15) << cons_energy(0, 0) << std::setw(15) << cano_prob_dens;
-        out << std::setw(15) << r(0, 0) << std::setw(15) << s(0, 0)
-            << std::setw(15) << cons_energy(0, 0) << std::setw(15) << cano_prob_dens;
+        std::cout << std::scientific << std::setw(20) << r(0, 0) << std::setw(20) << s(0, 0)
+            << std::setw(20) << cons_energy.sum() << std::setw(20) << prim_kine_estor;
+        out << std::scientific << std::setw(20) << r(0, 0) << std::setw(20) << s(0, 0)
+            << std::setw(20) << cons_energy.sum() << std::setw(20) << prim_kine_estor;
     }
 
     void nhc_procedure_for_pimd::implement() {
@@ -223,7 +247,8 @@ namespace nhc {
         int ctr = 0;
         
         print_nhc_procedure_title(out);
-        calc_syco_energy();
+        calc_cons_quant();
+        calc_prim_estor();
         print_nhc_procedure_data(out, t);
 
         const auto tstart = std::chrono::high_resolution_clock::now();
@@ -234,7 +259,8 @@ namespace nhc {
             thermo_propagate();
             
             if (ctr == bsp.data_coll_peri) {
-                calc_syco_energy();
+                calc_cons_quant();
+                calc_prim_estor();
                 print_nhc_procedure_data(out, t);
                 ctr = 0;
             }
