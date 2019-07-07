@@ -10,6 +10,12 @@
 #include "phy_const.h"
 #include "atom_data.h"
 
+#ifndef PHY_CONST_SHORTHAND
+#define PHY_CONST_SHORTHAND
+constexpr double h_bar = uovie::phy_const::red_Planck_const;
+constexpr double k = uovie::phy_const::Boltzmann_const;
+#endif // !PHY_CONST_SHORTHAND
+
 using namespace uovie::Global;
 
 void process::open(const std::string& filename) {
@@ -38,8 +44,22 @@ void process::read() {
     std::cout << "Read Infomation from " << fn_no_ex + ".vie" << std::endl;
     in >> job >> bsp.run_time >> bsp.step_size >> bsp.data_coll_peri;
     in >> sys.dimension >> sys.volume >> sys.temperature >> sys.pressure;
+    in >> sys.model_type;
 
-    const double k = phy_const::Boltzmann_const;
+    if (sys.model_type == "HO") {
+        double tmp_data;
+        in >> tmp_data;
+        sys.model_para.push_back(tmp_data);
+    }
+    else if (sys.model_type == "LJ") {
+        double tmp_data;
+        for (int i = 0; i < 2; i++) {
+            in >> tmp_data;
+            sys.model_para.push_back(tmp_data);
+        }
+    }else
+        throw "unsupported model";
+
     const double& T = sys.temperature;
     
     int mol_ctr = 0; int& mi = mol_ctr;
@@ -65,6 +85,7 @@ void process::read() {
                     double tmp_q;
                     sys.molecules[mi].atoms[ai].q.push_back(tmp_q);
                     in >> sys.molecules[mi].atoms[ai].q[di];
+                    sys.molecules[mi].atoms[ai].q[di] /= phy_const::a_u_length * 1e10;
                 }
             }
             // identify atomic numbers and assign atomic masses, momentums, forces
@@ -72,7 +93,7 @@ void process::read() {
                 for (int ei = 0; ei < atom_data::element.size(); ei++) {
                     if (sys.molecules[mi].atoms[ai].symbol == atom_data::element[ei]) {
                         sys.molecules[mi].atoms[ai].atomic_number = ei + 1;
-                        sys.molecules[mi].atoms[ai].m = atom_data::atomic_mass[ei];
+                        sys.molecules[mi].atoms[ai].m = atom_data::atomic_mass_kg[ei] / phy_const::a_u_mass;
                         break;
                     }
                 }

@@ -7,6 +7,7 @@
 
 // uovie headers
 #include "thermostat/nhc.h"
+#include "model.h"
 
 namespace uovie {
 namespace thermostat {
@@ -108,20 +109,34 @@ namespace nhc {
         q.col(0) = r.col(0);
     }
 
-    // calculate physical forces (simple harmonic oscillator)
+    // calculate physical forces
     void nhc_procedure_for_pimd::calc_physic_force()
     {
-        double omega = 1;
-
+        Eigen::ArrayXXd pV_pq = Eigen::ArrayXXd::Zero(d * N, nbead); // \frac{\partial V}{\partial q}
         Eigen::ArrayXXd pV_pr = Eigen::ArrayXXd::Zero(d * N, nbead); // \frac{\partial V}{\partial r}
 
-        for (auto cj = 0; cj < pV_pr.cols(); cj++)
-            pV_pr.col(0) += m.col(cj) * pow(omega, 2) * q.col(cj);
-        for (auto ci = 1; ci < pV_pr.cols(); ci++)
-            pV_pr.col(ci) = m.col(ci) * pow(omega, 2) * q.col(ci)
-                + ((ci - 1.0) / ci) * pV_pr.col(ci - 1);
+        if (sys.model_type == "HO") { // simple harmonic forces
+            model::harmonic_oscilator HO(sys.model_para[0]);
+            pV_pq = m * pow(HO.ome(), 2) * q;
+        }
+        else if (sys.model_type == "LJ") { // Lennard_Jones forces
+            model::Lennard_Jones LJ(sys.model_para[0], sys.model_para[1]);
+            for (auto ci = 0; ci < pV_pq.cols(); ci++) {
+                for (auto ni = 0; ni < N; ni++) {
+                    for (auto nj = 0; nj < N; nj++) {
+                        if (ni == nj) continue;
+                        pV_pq.block(d * ni, ci, d, 1) -= LJ.F(q.block(d * ni, ci, d, 1), q.block(d * nj, ci, d, 1));
+                    }
+                }
+            }
+        }
 
+        for (auto cj = 0; cj < pV_pr.cols(); cj++)
+            pV_pr.col(0) += pV_pq.col(cj);
+        for (auto ci = 1; ci < pV_pr.cols(); ci++)
+            pV_pr.col(ci) = pV_pq.col(ci) + ((ci - 1.0) / ci) * pV_pr.col(ci - 1);
         F = -1 * m_bar * pow(fic_omega, 2) * r - pV_pr / nbead;
+
     }
 
     void nhc_procedure_for_pimd::calc_thermo_force(const int& j)
@@ -184,8 +199,25 @@ namespace nhc {
     {
         kine_energy = s.pow(2) / (2 * m_tilde);
 
-        double omega = 1;
-        pote_energy = 0.5 * m_bar * pow(fic_omega, 2) * r.pow(2) + 0.5 * m * pow(omega, 2) * q.pow(2) / nbead;
+        
+        pote_energy.setZero();
+        if (sys.model_type == "HO") { // harmonic oscillator
+            model::harmonic_oscilator HO(sys.model_para[0]);
+            pote_energy = 0.5 * m * pow(HO.ome(), 2) * q.pow(2);
+        }
+        else if (sys.model_type == "LJ") { // Lennard_Jones
+            model::Lennard_Jones LJ(sys.model_para[0], sys.model_para[1]);
+            for (auto ci = 0; ci < pote_energy.cols(); ci++) {
+                for (auto ni = 0; ni < N; ni++) {
+                    for (auto nj = 0; nj < N; nj++) {
+                        if (ni == nj) continue;
+                        pote_energy.block(d * ni, ci, d, 1) += LJ.V(q.block(d * ni, ci, d, 1), q.block(d * nj, ci, d, 1));
+                    }
+                }
+            }
+            pote_energy /= 6;
+        }
+        pote_energy = 0.5 * m_bar * pow(fic_omega, 2) * r.pow(2) + pote_energy / nbead;
 
         ther_energy.setZero();
         for (int j = 0; j < M; j++)
@@ -199,13 +231,28 @@ namespace nhc {
     {
         prim_kine_estor = 0;
         for (int bi = 0; bi < nbead - 1; bi++)
-            prim_kine_estor += (m.col(0) * (q.col(bi + 1) - q.col(bi)).pow(2)).sum();
-        prim_kine_estor += (m.col(0) * (q.col(0) - q.col(nbead - 1)).pow(2)).sum();
+            prim_kine_estor += (m.col(bi) * (q.col(bi + 1) - q.col(bi)).pow(2)).sum();
+        prim_kine_estor += (m.col(nbead - 1) * (q.col(0) - q.col(nbead - 1)).pow(2)).sum();
         prim_kine_estor *= -1 * nbead / (2 * pow(h_bar * beta, 2));
         prim_kine_estor += dof * nbead / (2 * beta);
 
-        double omega = 1;
-        prim_pote_estor = 0.5 * (m * pow(omega, 2) * q.pow(2)).sum() / nbead;
+        if (sys.model_type == "HO") { // simple harmonic forces
+            model::harmonic_oscilator HO(sys.model_para[0]);
+            pote_energy = 0.5 * m * pow(HO.ome(), 2) * q.pow(2);
+        }
+        else if (sys.model_type == "LJ") { // Lennard_Jones forces
+            model::Lennard_Jones LJ(sys.model_para[0], sys.model_para[1]);
+            for (auto ci = 0; ci < pote_energy.cols(); ci++) {
+                for (auto ni = 0; ni < N; ni++) {
+                    for (auto nj = 0; nj < N; nj++) {
+                        if (ni == nj) continue;
+                        pote_energy.block(d * ni, ci, d, 1) += LJ.V(q.block(d * ni, ci, d, 1), q.block(d * nj, ci, d, 1));
+                    }
+                }
+            }
+            pote_energy /= 2;
+        }
+        prim_pote_estor = pote_energy.sum() / nbead;
 
         //prim_pres_estor = N*nbead/(beta * V)
     }

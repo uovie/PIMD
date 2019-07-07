@@ -12,8 +12,8 @@ using namespace uovie;
 
 uovie::Global::process simulation;
 
-int main(int argc, char* argv[]) {
-
+int main(int argc, char* argv[])
+{
     /*** ================================================== ***/
     /*** Simulation Preparation                             ***/
     /*** ================================================== ***/
