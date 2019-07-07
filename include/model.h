@@ -2,6 +2,8 @@
 #ifndef MODEL_H_
 #define MODEL_H_
 
+#include <vector>
+#include <cmath>
 #include <Eigen/Dense>
 
 namespace uovie {
@@ -10,7 +12,7 @@ namespace model {
     class harmonic_oscilator {
     public:
         harmonic_oscilator() = default;
-        harmonic_oscilator(const double _omega): omega(_omega) { }
+        harmonic_oscilator(const double& _omega): omega(_omega) { }
 
         double ome() const { return omega; }
 
@@ -21,7 +23,7 @@ namespace model {
     class Lennard_Jones {
     public:
         Lennard_Jones() = default;
-        Lennard_Jones(const double _epsilon, const double _sigma):
+        Lennard_Jones(const double& _epsilon, const double& _sigma):
             epsilon(_epsilon), sigma(_sigma) { }
 
         double eps() const { return epsilon; }
@@ -38,6 +40,27 @@ namespace model {
     private:
         const double epsilon;
         const double sigma;
+    };
+
+    class Lennard_Jones_Gaussian {
+    public:
+        Lennard_Jones_Gaussian() = default;
+        Lennard_Jones_Gaussian(const double& _epsilon, const double& _sigma,
+            const std::vector<double>& _c, const std::vector<double>& _alpha) :
+            epsilon(_epsilon), sigma(_sigma), c(_c), alpha(_alpha) { }
+
+        double eps() const { return epsilon; }
+        double sig() const { return sigma; }
+        double coe(int& i) const { return c[i]; }
+        double alp(int& i) const { return alpha[i]; }
+        double V(const Eigen::ArrayXXd& ri, const Eigen::ArrayXXd& rj);
+        Eigen::ArrayXXd F(const Eigen::ArrayXXd& ri, const Eigen::ArrayXXd& rj);
+         
+    private:
+        const double epsilon;
+        const double sigma;
+        const std::vector<double> c;
+        const std::vector<double> alpha;
     };
 
 } // !model
