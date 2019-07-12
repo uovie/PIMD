@@ -1,2 +1,2 @@
 # PIMD
-Path Integral Molecular Mechanics
+Path Integral Molecular Dynamics
